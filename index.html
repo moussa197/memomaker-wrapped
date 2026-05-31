@@ -550,27 +550,25 @@ function shareIt(){
 }
 
 // ── Init ─────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded',async()=>{
-  setTimeout(async()=>{
-    D=parseData()||DEMO;
+window.addEventListener('DOMContentLoaded',()=>{
+  // Données
+  D=parseData()||DEMO;
 
-    // Remplir les textes
-    document.getElementById('ss-yr').textContent=D.year||2024;
-    document.getElementById('ss-name').textContent=D.username||'';
-    document.getElementById('title-yr').textContent=D.year||2024;
-    document.getElementById('title-name').textContent='L\'année de '+(D.username||'');
+  // Remplir les textes du start screen
+  document.getElementById('ss-yr').textContent=D.year||2024;
+  document.getElementById('ss-name').textContent=D.username||'';
+  document.getElementById('title-yr').textContent=D.year||2024;
+  document.getElementById('title-name').textContent='L\'année de '+(D.username||'');
 
-    // Cacher le loader ET afficher le start screen immédiatement
+  // Init carte immédiatement
+  initMap();
+
+  // Afficher start screen après le loader
+  setTimeout(()=>{
     document.getElementById('loader').classList.add('out');
     const ss=document.getElementById('start-screen');
     ss.style.opacity='1';
     ss.style.visibility='visible';
-
-    // Init carte en arrière-plan
-    initMap().then(()=>{
-      const btn=document.querySelector('.play-btn');
-      if(btn)btn.innerHTML='<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:#0D0800"><path d="M8 5v14l11-7z"/></svg> Regarder mon Wrapped';
-    });
   },1200);
 });
 </script>
