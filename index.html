@@ -367,10 +367,13 @@ function addMarker(dest,active=false){
 // ════════════════════════════════════════════════════════════════
 async function startWrapped(){
   if(playing)return;
+  // Si pas de destinations dans les données, utiliser les démo
+  if(!D.destinations||D.destinations.length===0){
+    D.destinations=DEMO.destinations;
+  }
   if(!mapReady){
     const btn=document.querySelector('.play-btn');
     btn.textContent='⏳ Chargement...';
-    // Attendre que la carte soit prête (max 8s)
     let tries=0;
     while(!mapReady&&tries<80){await new Promise(r=>setTimeout(r,100));tries++;}
     if(!mapReady){btn.textContent='❌ Erreur carte';return;}
