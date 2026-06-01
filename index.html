@@ -265,10 +265,25 @@ let map,D,routeCoords=[],markers=[];
 let playing=false,skipReq=false,mapReady=false;
 
 // ── Parse URL ────────────────────────────────────────────────────
-function parseData(){
+async function parseData(){
   const r=new URLSearchParams(location.search).get('data');
   if(!r)return null;
-  try{return JSON.parse(atob(r.replace(/-/g,'+').replace(/_/g,'/')));}catch{return null;}
+  try{
+    const bin=atob(r.replace(/-/g,'+').replace(/_/g,'/'));
+    const bytes=Uint8Array.from(bin,ch=>ch.charCodeAt(0));
+    if(bytes[0]===0x1f&&bytes[1]===0x8b){
+      const ds=new DecompressionStream('gzip');
+      const writer=ds.writable.getWriter();
+      writer.write(bytes);writer.close();
+      const chunks=[];const reader=ds.readable.getReader();
+      while(true){const{done,value}=await reader.read();if(done)break;chunks.push(value);}
+      const total=chunks.reduce((a,b)=>a+b.length,0);
+      const result=new Uint8Array(total);
+      let off=0;chunks.forEach(ch=>{result.set(ch,off);off+=ch.length;});
+      return JSON.parse(new TextDecoder().decode(result));
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }catch(e){console.error('parseData:',e);return null;}
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -588,9 +603,8 @@ function shareIt(){
 }
 
 // ── Init ─────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded',()=>{
-  // Données
-  D=parseData()||DEMO;
+window.addEventListener('DOMContentLoaded',async()=>{
+  D=await parseData()||DEMO;
 
   // Remplir les textes du start screen
   document.getElementById('ss-yr').textContent=D.year||2024;
