@@ -130,16 +130,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 .pin-marker{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.6);cursor:pointer;box-shadow:0 0 16px currentColor;transition:transform .3s}
 .pin-marker.active{transform:scale(1.6);box-shadow:0 0 24px currentColor}
 /* Photo overlay sur marker actif */
-.maplibregl-popup.photo-ml-popup{z-index:15}
-.maplibregl-popup.photo-ml-popup .maplibregl-popup-content{
-  background:rgba(4,6,15,.92)!important;border:1.5px solid rgba(255,255,255,.15)!important;
-  border-radius:10px!important;padding:0!important;overflow:hidden;width:130px;
-  box-shadow:0 8px 32px rgba(0,0,0,.7)!important}
-.maplibregl-popup.photo-ml-popup .maplibregl-popup-tip{border-top-color:rgba(4,6,15,.92)!important}
-.photo-ml-popup img{width:100%!important;height:86px!important;object-fit:cover!important;display:block!important;border-radius:0!important}
-.photo-ml-popup .pp-label{padding:5px 8px;background:rgba(4,6,15,.85);
-  font-size:10px;letter-spacing:1px;text-transform:uppercase;
-  color:rgba(255,255,255,.65);font-family:'Space Grotesk',sans-serif;text-align:center;display:block}
+
 </style>
 </head>
 <body>
@@ -368,23 +359,14 @@ function initMap(){
   });
 }
 
-let activePopup=null;
 function addMarker(dest,active=false){
   const em=EM[dest.emotion]||EM.JOY;
   const el=document.createElement('div');
   el.className='pin-marker'+(active?' active':'');
   el.style.background=em.c;
   el.style.boxShadow=`0 0 16px ${em.c}99`;
-  el.style.color=em.c;
-  const m=new maplibregl.Marker({element:el,anchor:'center'}).setLngLat([dest.lng,dest.lat]).addTo(map);
+  const m=new maplibregl.Marker({element:el,offset:[-7,-7]}).setLngLat([dest.lng,dest.lat]).addTo(map);
   markers.push({marker:m,el,wrap:el});
-  if((dest.photoUrl||dest.photo)&&active){
-    const src=dest.photoUrl||dest.photo;
-    activePopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:20,className:'photo-ml-popup'})
-      .setLngLat([dest.lng,dest.lat])
-      .setHTML(`<img src="${src}" onerror="this.parentElement.parentElement.style.display='none'"><div class="pp-label">${dest.city||''}</div>`)
-      .addTo(map);
-  }
   return {el,wrap:el};
 }
 
@@ -447,7 +429,6 @@ async function startWrapped(){
 
     // Marker actif
     markers.forEach(m=>m.el.classList.remove('active'));
-    if(activePopup){activePopup.remove();activePopup=null;}
     const {el:pinEl}=addMarker(dest,true);
 
     // Afficher card ville
@@ -462,7 +443,6 @@ async function startWrapped(){
     await wait(skipReq?200:2500);
     hide('act-city');
     pinEl.classList.remove('active');
-    if(activePopup){activePopup.remove();activePopup=null;}
     await wait(200);
     skipReq=false;
   }
