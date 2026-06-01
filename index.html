@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MemoMaker Wrapped</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400;1,700&family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#04060F}
+body{font-family:'Space Grotesk',sans-serif;color:#F2F0EB}
+
+/* MAP */
+#map{position:fixed;inset:0;width:100%;height:100%}
+
+/* LOADER */
+#loader{position:fixed;inset:0;background:#04060F;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+#loader.hide{display:none}
+.llo{font-family:'Playfair Display',serif;font-size:40px;font-style:italic;color:#E8B84B}
+.lbar{width:160px;height:1px;background:#1E2A3D;overflow:hidden;position:relative}
+.lbar::after{content:'';position:absolute;left:-100%;top:0;width:100%;height:100%;background:linear-gradient(90deg,transparent,#E8B84B,transparent);animation:ls 1.2s .4s forwards}
+@keyframes ls{to{left:100%}}
+
+/* START SCREEN */
+#start{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(4,6,15,.8);backdrop-filter:blur(6px)}
+#start.hide{display:none}
+.ss-pin{font-size:52px;animation:pb 1.2s ease-in-out infinite}
+@keyframes pb{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.ss-yr{font-family:'Playfair Display',serif;font-size:clamp(48px,10vw,96px);font-weight:900;font-style:italic;background:linear-gradient(135deg,#E8B84B,#F7D98B,#1EEAC8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.ss-name{font-family:'Playfair Display',serif;font-size:clamp(20px,4vw,36px);font-style:italic;color:rgba(242,240,235,.7);margin-bottom:8px}
+.ss-sub{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#8892A4;margin-bottom:36px}
+.play-btn{background:linear-gradient(135deg,#E8B84B,#F7D98B);color:#0D0800;border:none;padding:16px 40px;border-radius:100px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;gap:10px;transition:transform .2s,box-shadow .2s}
+.play-btn:hover{transform:scale(1.04);box-shadow:0 16px 40px rgba(232,184,75,.3)}
+.play-btn svg{width:18px;height:18px;fill:#0D0800}
+
+/* PROGRESS */
+#progress{position:fixed;top:0;left:0;height:2px;background:#E8B84B;z-index:50;width:0%;transition:width .4s ease}
+
+/* SKIP */
+#skip{position:fixed;bottom:28px;right:28px;z-index:50;display:none;background:rgba(8,13,26,.8);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.1);color:#8892A4;padding:10px 20px;border-radius:100px;font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer}
+#skip:hover{border-color:#E8B84B;color:#E8B84B}
+
+/* MUTE */
+#mute{position:fixed;bottom:28px;left:28px;z-index:50;display:none;background:rgba(8,13,26,.8);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.1);color:#8892A4;padding:10px 14px;border-radius:100px;font-size:16px;cursor:pointer}
+
+/* COUNTER */
+#counter{position:fixed;top:28px;right:28px;z-index:50;display:none;text-align:right}
+.cnt-num{font-family:'Playfair Display',serif;font-size:44px;font-weight:900;font-style:italic;color:#E8B84B;line-height:1}
+.cnt-tot{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8892A4}
+
+/* ACTES - tous cachés par défaut */
+.act{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:30;width:90%;max-width:820px;pointer-events:none;display:none}
+.act.on{display:block}
+.act-share{pointer-events:all !important}
+
+/* CITY CARD */
+#city-card{position:fixed;bottom:48px;left:50%;transform:translateX(-50%) translateY(20px);z-index:30;display:none;text-align:center;transition:transform .4s,opacity .4s;opacity:0}
+#city-card.on{display:block;opacity:1;transform:translateX(-50%) translateY(0)}
+.cc-pill{display:inline-block;background:rgba(8,13,26,.9);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:20px 36px}
+.cc-step{font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#8892A4;margin-bottom:8px}
+.cc-city{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;font-style:italic;margin-bottom:4px}
+.cc-country{font-size:12px;color:#8892A4;margin-bottom:14px}
+.cc-em{display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:100px;border:1px solid;font-size:12px}
+
+/* TEXTES */
+.t-eye{font-size:10px;letter-spacing:5px;text-transform:uppercase;color:#E8B84B;margin-bottom:14px}
+.t-yr{font-family:'Playfair Display',serif;font-size:clamp(90px,17vw,180px);font-weight:900;font-style:italic;line-height:.9;background:linear-gradient(135deg,#E8B84B,#F7D98B,#1EEAC8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.t-name{font-family:'Playfair Display',serif;font-size:clamp(24px,4vw,44px);font-style:italic;margin-top:8px;color:rgba(242,240,235,.8)}
+.t-sub{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#8892A4;margin-top:10px}
+.t-big{font-family:'Playfair Display',serif;font-size:clamp(52px,11vw,100px);font-weight:900;font-style:italic;line-height:1}
+.t-earth{font-family:'Playfair Display',serif;font-size:clamp(72px,14vw,140px);font-weight:900;font-style:italic;line-height:1}
+.t-stat-num{font-family:'Playfair Display',serif;font-size:clamp(52px,9vw,90px);font-weight:900;line-height:1}
+.t-stat-lbl{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-top:4px}
+.t-div{width:1px;height:32px;background:rgba(255,255,255,.08);margin:6px auto}
+.t-col-title{font-family:'Playfair Display',serif;font-size:clamp(32px,6vw,56px);font-weight:900;font-style:italic;line-height:1.1;margin-bottom:14px}
+.t-col-desc{font-size:13px;color:rgba(255,255,255,.5);line-height:1.8;margin-bottom:18px;max-width:380px;margin-left:auto;margin-right:auto}
+.t-col-pill{font-size:11px;letter-spacing:2px;font-family:monospace;color:#E8B84B;background:rgba(232,184,75,.08);padding:7px 14px;border-radius:4px;display:inline-block}
+
+/* SHARE */
+.sh-layout{display:flex;align-items:center;justify-content:center;gap:36px;flex-wrap:wrap}
+.sh-left{text-align:left}
+.sh-title{font-family:'Playfair Display',serif;font-size:clamp(30px,5vw,52px);font-weight:900;font-style:italic;line-height:1.1;margin-bottom:10px}
+.sh-sub{font-size:13px;color:rgba(255,255,255,.5);margin-bottom:24px}
+.sh-btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{padding:13px 26px;border-radius:100px;font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:8px;transition:transform .2s}
+.btn:hover{transform:translateY(-2px)}
+.btn-g{background:#E8B84B;color:#0D0800}
+.btn-o{background:rgba(255,255,255,.06);color:#F2F0EB;border:1px solid rgba(255,255,255,.1)}
+#qr-box{background:white;border-radius:14px;padding:10px;flex-shrink:0;display:none;line-height:0}
+
+/* PIN */
+.pin{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.7);transition:transform .3s}
+.pin.active{transform:scale(1.8)}
+
+/* TOAST */
+#toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%) translateY(20px);background:#1EEAC8;color:#001510;padding:11px 22px;border-radius:100px;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:all .3s;pointer-events:none;z-index:300}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* OVERLAYS */
+#ov1{position:fixed;inset:0;opacity:0;pointer-events:none;z-index:2;mix-blend-mode:multiply;transition:opacity 1s}
+#ov2{position:fixed;inset:0;opacity:0;pointer-events:none;z-index:3;transition:opacity 2s}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="ov1"></div>
+<div id="ov2"></div>
+<div id="progress"></div>
+<button id="skip" onclick="doSkip()">Passer →</button>
+<button id="mute" onclick="doMute()">🔊</button>
+<div id="counter"><div class="cnt-num" id="cnt-n">1</div><div class="cnt-tot" id="cnt-t">/ 6</div></div>
+
+<!-- Acte 1 : titre -->
+<div id="a1" class="act">
+  <div class="t-eye">✦ MemoMaker Wrapped ✦</div>
+  <div class="t-yr" id="a1-yr">2024</div>
+  <div class="t-name" id="a1-name">L'année de Moussa</div>
+  <div class="t-sub">Ta carte émotionnelle du monde</div>
+</div>
+
+<!-- City card -->
+<div id="city-card">
+  <div class="cc-pill">
+    <div class="cc-step" id="cc-step">Étape 1</div>
+    <div class="cc-city" id="cc-city">Paris</div>
+    <div class="cc-country" id="cc-country">France</div>
+    <div class="cc-em" id="cc-em">☀️ Joie</div>
+  </div>
+</div>
+
+<!-- Acte 3 : overview -->
+<div id="a3" class="act">
+  <div class="t-eye">Ton voyage de l'année</div>
+  <div id="a3-txt" style="font-family:'Playfair Display',serif;font-size:clamp(18px,3vw,28px);font-style:italic;color:#F2F0EB"></div>
+</div>
+
+<!-- Acte % Terre -->
+<div id="a-earth" class="act">
+  <div class="t-eye">Cette année tu as exploré</div>
+  <div class="t-earth" id="earth-n">0%</div>
+  <div style="font-family:'Playfair Display',serif;font-size:clamp(16px,2.5vw,24px);font-style:italic;color:rgba(242,240,235,.5);margin-top:8px">de la surface terrestre</div>
+  <div id="earth-sub" style="font-size:11px;letter-spacing:2px;color:rgba(232,184,75,.6);margin-top:14px;text-transform:uppercase"></div>
+</div>
+
+<!-- Acte 4 : émotion -->
+<div id="a4" class="act">
+  <div class="t-eye">Ton émotion dominante</div>
+  <div id="a4-em" style="font-size:64px;display:block;margin-bottom:18px;animation:fl 3s ease-in-out infinite">☀️</div>
+  <div class="t-big" id="a4-name">JOIE</div>
+  <div id="a4-pct" style="font-size:14px;color:rgba(255,255,255,.5);margin-top:12px;letter-spacing:2px"></div>
+</div>
+<style>@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}</style>
+
+<!-- Acte 5 : stats -->
+<div id="a5" class="act">
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div id="s1" style="opacity:0;transform:translateY(16px);transition:opacity .6s,transform .6s">
+      <div class="t-stat-num" style="color:#E8B84B" id="s-mem">0</div>
+      <div class="t-stat-lbl">souvenirs créés</div>
+    </div>
+    <div class="t-div"></div>
+    <div id="s2" style="opacity:0;transform:translateY(16px);transition:opacity .6s .25s,transform .6s .25s">
+      <div class="t-stat-num" style="color:#1EEAC8" id="s-cnt">0</div>
+      <div class="t-stat-lbl">pays explorés</div>
+    </div>
+    <div class="t-div"></div>
+    <div id="s3" style="opacity:0;transform:translateY(16px);transition:opacity .6s .5s,transform .6s .5s">
+      <div class="t-stat-num" style="color:#818CF8" id="s-km">0</div>
+      <div class="t-stat-lbl">km parcourus</div>
+    </div>
+  </div>
+</div>
+
+<!-- Acte 6 : couleur de vie -->
+<div id="a6" class="act">
+  <div class="t-eye">Ta couleur de vie</div>
+  <div class="t-col-title">Ton dégradé <em id="a6-yr">2024</em></div>
+  <div class="t-col-desc">Ce dégradé est unique — le mélange exact de tes émotions cette année.</div>
+  <div class="t-col-pill" id="a6-pill">#F5C842 → #10B981</div>
+</div>
+
+<!-- Acte 7 : share -->
+<div id="a7" class="act act-share">
+  <div class="t-eye">Partage ton année</div>
+  <div class="sh-layout">
+    <div class="sh-left">
+      <div class="sh-title">Ton Wrapped<br><em id="a7-yr">2024</em></div>
+      <div class="sh-sub">Scanne ou copie le lien</div>
+      <div class="sh-btns">
+        <button class="btn btn-g" onclick="doCopy()">📋 Copier</button>
+        <button class="btn btn-o" onclick="doShare()">↗ Partager</button>
+        <button class="btn btn-o" onclick="location.reload()">↺ Revoir</button>
+      </div>
+    </div>
+    <div id="qr-box"><div id="qr-div"></div></div>
+  </div>
+</div>
+
+<!-- Start screen -->
+<div id="start">
+  <div class="ss-pin">📍</div>
+  <div class="ss-yr" id="s-yr">2024</div>
+  <div class="ss-name" id="s-name">L'année de Moussa</div>
+  <div class="ss-sub" id="s-sub">Ta carte émotionnelle</div>
+  <button class="play-btn" id="play-btn" onclick="launch()">
+    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    Regarder mon Wrapped
+  </button>
+</div>
+
+<!-- Loader -->
+<div id="loader">
+  <div class="llo">MemoMaker</div>
+  <div class="lbar"></div>
+</div>
+
+<div id="toast">✓ Lien copié !</div>
+
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG ÉMOTIONS
+// ═══════════════════════════════════════════════════════════
+const EM={
+  JOY:      {l:'Joie',     e:'☀️',c:'#F5C842'},
+  NOSTALGIA:{l:'Nostalgie',e:'🌊',c:'#3B82F6'},
+  LOVE:     {l:'Amour',   e:'❤️',c:'#EF4444'},
+  ADVENTURE:{l:'Aventure',e:'🌿',c:'#10B981'},
+  SADNESS:  {l:'Tristesse',e:'🌙',c:'#8B5CF6'},
+};
+
+// ═══════════════════════════════════════════════════════════
+// DONNÉES DÉMO
+// ═══════════════════════════════════════════════════════════
+const DEMO={
+  year:2024,username:'Moussa',
+  totalMemories:24,totalCountries:7,totalKm:12480,
+  dominantEmotion:'JOY',dominantEmotionHex:'#F5C842',
+  lifeColor:'linear-gradient(135deg,#F5C842,#10B981,#3B82F6)',
+  bestMonth:'Juillet',farthestCity:'Tokyo',earthPercentage:5.6,
+  emotionPercentages:{JOY:38,ADVENTURE:25,NOSTALGIA:18,LOVE:12,SADNESS:7},
+  destinations:[
+    {city:'Paris',   country:'France',   lat:48.8566,lng:2.3522,  emotion:'JOY'},
+    {city:'Barcelone',country:'Espagne', lat:41.3851,lng:2.1734,  emotion:'ADVENTURE'},
+    {city:'Rome',    country:'Italie',   lat:41.9028,lng:12.4964, emotion:'LOVE'},
+    {city:'Tokyo',   country:'Japon',    lat:35.6762,lng:139.6503,emotion:'ADVENTURE'},
+    {city:'New York',country:'USA',      lat:40.7128,lng:-74.006, emotion:'JOY'},
+  ]
+};
+
+// ═══════════════════════════════════════════════════════════
+// PARSE URL — supporte JSON Base64 (Java sans GZIP)
+// ═══════════════════════════════════════════════════════════
+async function parseData(){
+  const raw=new URLSearchParams(location.search).get('data');
+  if(!raw)return null;
+  try{
+    // fetch data URI évite les problèmes d'encodage UTF-8 avec atob
+    let b64=raw.replace(/-/g,'+').replace(/_/g,'/');
+    while(b64.length%4)b64+='=';
+    const res=await fetch('data:application/octet-stream;base64,'+b64);
+    const buf=await res.arrayBuffer();
+    const text=new TextDecoder('utf-8').decode(new Uint8Array(buf));
+    const d=JSON.parse(text);
+    // Nettoyer destinations
+    if(d.destinations){
+      d.destinations=d.destinations.filter(x=>x.city&&x.city.trim()&&x.lat&&x.lng);
+      d.destinations.forEach(x=>{
+        if(x.photoUrl&&!x.photoUrl.startsWith('http'))delete x.photoUrl;
+      });
+    }
+    console.log('✅ Data OK:',d.username,d.year,d.destinations?.length,'stops');
+    return d;
+  }catch(e){
+    console.error('❌ parseData:',e.message);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let D=DEMO, map, mapOK=false, going=false, skipNow=false;
+let coords=[], pins=[];
+let AC=null, GN=null, muted=false;
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+const W=ms=>new Promise(r=>{
+  const t=setTimeout(r,ms);
+  const i=setInterval(()=>{if(skipNow){clearTimeout(t);clearInterval(i);r();}},25);
+  setTimeout(()=>clearInterval(i),ms+50);
+});
+
+function showAct(id){
+  document.querySelectorAll('.act').forEach(el=>el.classList.remove('on'));
+  const el=document.getElementById(id);
+  if(el)el.classList.add('on');
+}
+function hideActs(){document.querySelectorAll('.act').forEach(el=>el.classList.remove('on'));}
+function prog(p){document.getElementById('progress').style.width=p+'%';}
+
+function countUp(id,to,dur=1200,fmt=v=>v.toLocaleString('fr')){
+  const el=document.getElementById(id);if(!el)return;
+  const s=performance.now();
+  const f=n=>{const p=Math.min((n-s)/dur,1);const e=1-Math.pow(1-p,4);el.textContent=fmt(Math.round(to*e));if(p<1)requestAnimationFrame(f);};
+  requestAnimationFrame(f);
+}
+
+const flyTo=(center,zoom=6,dur=2000)=>new Promise(r=>{
+  const d=skipNow?400:dur;
+  map.flyTo({center,zoom,pitch:skipNow?0:38,bearing:skipNow?0:(Math.random()*14-7),duration:d,essential:true,curve:1.3});
+  const t=setTimeout(r,d+100);
+  const i=setInterval(()=>{if(skipNow){clearTimeout(t);clearInterval(i);map.stop();r();}},25);
+  setTimeout(()=>clearInterval(i),d+150);
+});
+
+// ═══════════════════════════════════════════════════════════
+// MAP INIT
+// ═══════════════════════════════════════════════════════════
+function initMap(){
+  map=new maplibregl.Map({
+    container:'map',
+    style:{version:8,
+      sources:{carto:{type:'raster',tiles:['https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png'],tileSize:256,attribution:'© CartoDB'}},
+      layers:[{id:'bg',type:'background',paint:{'background-color':'#04060F'}},{id:'carto',type:'raster',source:'carto',paint:{'raster-opacity':.9,'raster-saturation':-.5}}]
+    },
+    center:[15,28],zoom:2.2,interactive:false,antialias:true
+  });
+  map.on('load',()=>{
+    map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[]}}});
+    map.addLayer({id:'rg',type:'line',source:'route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#E8B84B','line-width':4,'line-opacity':.1,'line-blur':5}});
+    map.addLayer({id:'rl',type:'line',source:'route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#E8B84B','line-width':1.5,'line-opacity':.65,'line-dasharray':[3,3]}});
+    mapOK=true;
+    console.log('🗺️ Map ready');
+    document.getElementById('play-btn').innerHTML='<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:#0D0800"><path d="M8 5v14l11-7z"/></svg> Regarder mon Wrapped';
+  });
+}
+
+function addPin(dest,active){
+  const em=EM[dest.emotion]||EM.JOY;
+  const el=document.createElement('div');
+  el.className='pin'+(active?' active':'');
+  el.style.cssText=`background:${em.c};color:${em.c};box-shadow:0 0 ${active?20:10}px ${em.c}99`;
+  new maplibregl.Marker({element:el,anchor:'center'}).setLngLat([dest.lng,dest.lat]).addTo(map);
+  pins.push(el);
+  return el;
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════════
+function startAudio(){
+  if(AC)return;
+  try{
+    AC=new(window.AudioContext||window.webkitAudioContext)();
+    GN=AC.createGain();GN.gain.setValueAtTime(0,AC.currentTime);
+    GN.gain.linearRampToValueAtTime(.08,AC.currentTime+3);GN.connect(AC.destination);
+    [110,165,220,247,330].forEach((f,i)=>{
+      const o=AC.createOscillator(),g=AC.createGain();
+      o.type=i%2?'triangle':'sine';o.frequency.value=f;g.gain.value=.14/(i+1);
+      const lfo=AC.createOscillator(),lg=AC.createGain();
+      lfo.frequency.value=.07+i*.03;lg.gain.value=.4;lfo.connect(lg);lg.connect(o.frequency);lfo.start();
+      o.connect(g);g.connect(GN);o.start();
+    });
+    document.getElementById('mute').style.display='block';
+  }catch(e){}
+}
+function doMute(){
+  if(!GN)return;muted=!muted;
+  GN.gain.linearRampToValueAtTime(muted?0:.08,AC.currentTime+.4);
+  document.getElementById('mute').textContent=muted?'🔇':'🔊';
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCÉNARIO
+// ═══════════════════════════════════════════════════════════
+async function launch(){
+  if(going)return;
+  if(!mapOK){
+    document.getElementById('play-btn').textContent='⏳ Chargement...';
+    let tries=0;
+    while(!mapOK&&tries<60){await new Promise(r=>setTimeout(r,100));tries++;}
+    if(!mapOK)return;
+  }
+  going=true;
+  startAudio();
+  document.getElementById('start').classList.add('hide');
+  document.getElementById('skip').style.display='block';
+
+  const dests=D.destinations||[];
+  if(!dests.length){dests.push(...DEMO.destinations);}
+
+  // ── A1 : TITRE ──────────────────────────────────────────
+  prog(5);
+  await flyTo([15,25],2.2,1200);
+  showAct('a1');
+  await W(2200);
+  hideActs();await W(350);skipNow=false;
+
+  // ── A2 : VOYAGE ─────────────────────────────────────────
+  document.getElementById('counter').style.display='block';
+  document.getElementById('cnt-t').textContent='/ '+dests.length;
+
+  for(let i=0;i<dests.length;i++){
+    const dest=dests[i];
+    const em=EM[dest.emotion]||EM.JOY;
+    prog(10+i/dests.length*38);
+    document.getElementById('cnt-n').textContent=i+1;
+
+    // Overlay émotion
+    document.getElementById('ov1').style.cssText=`position:fixed;inset:0;opacity:.45;pointer-events:none;z-index:2;mix-blend-mode:multiply;background:${em.c}22;transition:all .8s`;
+
+    await flyTo([dest.lng,dest.lat],6,skipNow?400:2000);
+    map.easeTo({pitch:0,bearing:0,duration:500});
+    await new Promise(r=>setTimeout(r,400));
+
+    coords.push([dest.lng,dest.lat]);
+    map.getSource('route').setData({type:'Feature',geometry:{type:'LineString',coordinates:coords}});
+    pins.forEach(p=>p.classList.remove('active'));
+    addPin(dest,true);
+
+    document.getElementById('cc-step').textContent='Étape '+(i+1);
+    document.getElementById('cc-city').textContent=dest.city;
+    document.getElementById('cc-country').textContent=dest.country;
+    document.getElementById('cc-em').textContent=em.e+' '+em.l;
+    document.getElementById('cc-em').style.cssText=`display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:100px;border:1px solid ${em.c}66;font-size:12px;color:${em.c}`;
+    document.getElementById('city-card').classList.add('on');
+
+    await W(skipNow?150:2400);
+    document.getElementById('city-card').classList.remove('on');
+    document.getElementById('ov1').style.opacity='0';
+    await W(150);skipNow=false;
+  }
+
+  // ── A3 : OVERVIEW ───────────────────────────────────────
+  prog(50);
+  document.getElementById('counter').style.display='none';
+  const lngs=dests.map(d=>d.lng),lats=dests.map(d=>d.lat);
+  map.fitBounds([[Math.min(...lngs)-8,Math.min(...lats)-8],[Math.max(...lngs)+8,Math.max(...lats)+8]],{padding:80,duration:skipNow?400:2400});
+  await new Promise(r=>setTimeout(r,skipNow?500:2600));skipNow=false;
+  document.getElementById('a3-txt').textContent=dests.length+' destinations · '+(D.totalKm||0).toLocaleString('fr')+' km parcourus';
+  showAct('a3');
+  await W(3200);hideActs();await W(350);skipNow=false;
+
+  // ── A-EARTH : % TERRE ───────────────────────────────────
+  prog(58);
+  const ep=parseFloat(D.earthPercentage||0);
+  document.getElementById('earth-sub').textContent=(D.totalCountries||0)+' pays · '+(D.totalKm||0).toLocaleString('fr')+' km';
+  showAct('a-earth');
+  const es=performance.now();
+  const ea=n=>{const p=Math.min((n-es)/1500,1);document.getElementById('earth-n').textContent=(ep*(1-Math.pow(1-p,3))).toFixed(2)+'%';if(p<1)requestAnimationFrame(ea);};
+  requestAnimationFrame(ea);
+  await W(3500);hideActs();await W(350);skipNow=false;
+
+  // ── A4 : ÉMOTION ────────────────────────────────────────
+  prog(65);
+  const em=EM[D.dominantEmotion]||EM.JOY;
+  document.getElementById('ov1').style.cssText=`position:fixed;inset:0;opacity:1;pointer-events:none;z-index:2;mix-blend-mode:multiply;background:${em.c}25;transition:all 1s`;
+  document.getElementById('a4-em').textContent=em.e;
+  document.getElementById('a4-name').textContent=em.l.toUpperCase();
+  document.getElementById('a4-name').style.color=em.c;
+  const pct=Math.round((D.emotionPercentages&&D.emotionPercentages[D.dominantEmotion])||0);
+  document.getElementById('a4-pct').textContent='dans '+pct+'% de tes souvenirs';
+  await flyTo([15,25],2.5,skipNow?400:1400);
+  showAct('a4');
+  await W(4000);
+  document.getElementById('ov1').style.opacity='0';
+  hideActs();await W(350);skipNow=false;
+
+  // ── A5 : STATS ──────────────────────────────────────────
+  prog(78);
+  showAct('a5');
+  ['s1','s2','s3'].forEach((id,i)=>setTimeout(()=>{const el=document.getElementById(id);el.style.opacity='1';el.style.transform='none';},i*300));
+  setTimeout(()=>countUp('s-mem',D.totalMemories||0),100);
+  setTimeout(()=>countUp('s-cnt',D.totalCountries||0,1000),400);
+  setTimeout(()=>countUp('s-km',D.totalKm||0,1400,v=>v.toLocaleString('fr')+' km'),700);
+  await W(5000);
+  ['s1','s2','s3'].forEach(id=>{const el=document.getElementById(id);el.style.opacity='0';el.style.transform='translateY(16px)';});
+  hideActs();await W(350);skipNow=false;
+
+  // ── A6 : COULEUR DE VIE ─────────────────────────────────
+  prog(90);
+  const stops=Object.entries(D.emotionPercentages||{}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k])=>EM[k]?.c||'#666');
+  const grad=D.lifeColor||(stops.length>1?`linear-gradient(135deg,${stops.join(',')})`:`linear-gradient(135deg,${stops[0]||'#E8B84B'},#1EEAC8)`);
+  document.getElementById('ov2').style.cssText=`position:fixed;inset:0;opacity:.2;pointer-events:none;z-index:3;background:${grad};transition:opacity 2s`;
+  document.getElementById('a6-yr').textContent=D.year||2024;
+  document.getElementById('a6-pill').textContent=stops.join(' → ');
+  showAct('a6');
+  await W(4000);
+  document.getElementById('ov2').style.opacity='0';
+  hideActs();await W(350);skipNow=false;
+
+  // ── A7 : SHARE ──────────────────────────────────────────
+  prog(100);
+  document.getElementById('skip').style.display='none';
+  document.getElementById('a7-yr').textContent=D.year||2024;
+  showAct('a7');
+  setTimeout(()=>{
+    if(!window.QRCode)return;
+    const d=document.getElementById('qr-div');d.innerHTML='';
+    try{new QRCode(d,{text:location.href,width:148,height:148,colorDark:'#04060F',colorLight:'#FFFFFF'});document.getElementById('qr-box').style.display='block';}catch(e){}
+  },600);
+  let b=0;const rot=setInterval(()=>{b+=.05;map.setBearing(b);},30);
+  setTimeout(()=>clearInterval(rot),10000);
+}
+
+function doSkip(){skipNow=true;}
+
+function doCopy(){
+  navigator.clipboard.writeText(location.href).then(()=>{
+    const t=document.getElementById('toast');t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2500);
+  });
+}
+function doShare(){
+  if(navigator.share)navigator.share({title:'MemoMaker Wrapped '+(D.year||2024),url:location.href});
+  else doCopy();
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',async()=>{
+  // Parse les données
+  D=await parseData()||DEMO;
+  const yr=D.year||2024;
+  const name=D.username||'toi';
+
+  // Remplir start screen
+  document.getElementById('s-yr').textContent=yr;
+  document.getElementById('s-name').textContent='L\'année de '+name;
+  document.getElementById('a1-yr').textContent=yr;
+  document.getElementById('a1-name').textContent='L\'année de '+name;
+  document.getElementById('a6-yr').textContent=yr;
+  document.getElementById('a7-yr').textContent=yr;
+
+  // Init carte
+  initMap();
+
+  // Cacher loader + montrer start
+  setTimeout(()=>{
+    document.getElementById('loader').classList.add('hide');
+    document.getElementById('start').style.opacity='1';
+    document.getElementById('start').style.visibility='visible';
+  },1200);
+});
+</script>
+</body>
+</html>
