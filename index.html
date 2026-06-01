@@ -51,6 +51,9 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 #skip-btn{position:fixed;bottom:28px;right:28px;z-index:50;background:rgba(8,13,26,.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);color:#8892A4;padding:9px 20px;border-radius:100px;font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;pointer-events:all;transition:all .2s;opacity:0;visibility:hidden}
 #skip-btn.show{opacity:1;visibility:visible}
 #skip-btn:hover{border-color:#E8B84B;color:#E8B84B}
+#mute-btn{position:fixed;bottom:28px;left:28px;z-index:50;background:rgba(8,13,26,.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);color:#8892A4;padding:9px 14px;border-radius:100px;font-size:14px;cursor:pointer;pointer-events:all;transition:all .2s;opacity:0;visibility:hidden}
+#mute-btn.show{opacity:1;visibility:visible}
+#mute-btn:hover{border-color:rgba(255,255,255,.2)}
 
 /* ── Étape counter ── */
 #step-counter{position:fixed;top:28px;right:28px;z-index:50;text-align:right;opacity:0;transition:opacity .4s}
@@ -140,6 +143,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 <div id="color-full-overlay"></div>
 <div id="progress"></div>
 <div id="skip-btn" onclick="skip()">Passer →</div>
+<button id="mute-btn" onclick="toggleMute()" title="Musique">🔊</button>
 
 <div id="step-counter" class="step-counter">
   <div class="sc-cur" id="sc-cur">1</div>
@@ -208,12 +212,20 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 </div>
 
 <div id="act-share" class="act-text">
-  <div class="sh-film-title">Partage<br>ton année 🌍</div>
-  <div class="sh-film-sub">Montre à tes proches ce que tes souvenirs racontent de toi</div>
-  <div class="sh-btns">
-    <button class="btn btn-g" onclick="copyLink()">📋 Copier le lien</button>
-    <button class="btn btn-o" onclick="shareIt()">↗ Partager</button>
-    <button class="btn btn-o" onclick="restart()">↺ Revoir</button>
+  <div style="font-size:10px;letter-spacing:5px;text-transform:uppercase;color:rgba(232,184,75,.7);margin-bottom:16px">Partage ton année</div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap">
+    <div style="text-align:left">
+      <div class="sh-film-title" style="font-size:clamp(28px,5vw,48px);text-align:left">Ton Wrapped<br><em id="sh-yr2">2024</em></div>
+      <div class="sh-film-sub" style="margin-top:10px;margin-bottom:20px;text-align:left">Scanne ou copie le lien</div>
+      <div class="sh-btns" style="justify-content:flex-start">
+        <button class="btn btn-g" onclick="copyLink()">📋 Copier</button>
+        <button class="btn btn-o" onclick="shareIt()">↗ Partager</button>
+        <button class="btn btn-o" onclick="restart()">↺ Revoir</button>
+      </div>
+    </div>
+    <div style="background:white;border-radius:16px;padding:12px;flex-shrink:0;line-height:0">
+      <canvas id="qr-canvas" width="160" height="160"></canvas>
+    </div>
   </div>
 </div>
 
@@ -231,6 +243,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 <div class="toast" id="toast">✓ Lien copié !</div>
 
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 // ── Config émotions ──────────────────────────────────────────────
 const EM={
@@ -406,6 +419,7 @@ async function startWrapped(){
   document.getElementById('start-screen').style.opacity='0';
   document.getElementById('start-screen').style.visibility='hidden';
   show('skip-btn');
+  initAudio();
 
   // ── ACTE 1 : Ouverture ────────────────────────────────────────
   setProgress(5);
@@ -576,6 +590,8 @@ async function startWrapped(){
   // ── ACTE 7 : Share ────────────────────────────────────────────
   setProgress(100);
   hide('skip-btn');
+  document.getElementById('sh-yr2').textContent=D.year||2024;
+  setTimeout(generateQR,600);
 
   // Rotation douce de la carte
   let bearing=0;
