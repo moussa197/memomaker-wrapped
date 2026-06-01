@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MemoMaker Wrapped</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#04060F}
+body{font-family:'Space Grotesk',sans-serif;color:#F2F0EB}
+
+/* ── MAP plein écran ── */
+#map{position:fixed;inset:0;width:100%;height:100%}
+
+/* ── Grain ── */
+body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");pointer-events:none;z-index:1}
+
+/* ── Overlay de couleur émotion ── */
+#color-overlay{position:fixed;inset:0;opacity:0;pointer-events:none;transition:opacity 1.2s ease;z-index:2;mix-blend-mode:multiply}
+
+/* ── Toutes les couches UI ── */
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none}
+
+/* ── Loader ── */
+#loader{position:fixed;inset:0;background:#04060F;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .8s,visibility .8s}
+#loader.out{opacity:0;visibility:hidden}
+.llo{font-family:'Playfair Display',serif;font-size:40px;font-style:italic;color:#E8B84B;opacity:0;animation:fIn .6s .3s forwards}
+.lbar{width:160px;height:1px;background:#1E2A3D;overflow:hidden;position:relative}
+.lbar::after{content:'';position:absolute;left:-100%;top:0;width:100%;height:100%;background:linear-gradient(90deg,transparent,#E8B84B,transparent);animation:ls 1.1s .5s forwards}
+@keyframes ls{to{left:100%}}
+@keyframes fIn{to{opacity:1}}
+
+/* ── Start screen ── */
+#start-screen{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(4,6,15,.7);backdrop-filter:blur(4px);opacity:0;transition:opacity .6s,visibility .6s;visibility:hidden}
+#start-screen.show{opacity:1;visibility:visible}
+.ss-pin{font-size:56px;animation:pinBounce 1.2s ease-in-out infinite}
+@keyframes pinBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.ss-title{font-family:'Playfair Display',serif;font-size:clamp(36px,7vw,72px);font-weight:900;font-style:italic;text-align:center;margin:20px 0 8px;line-height:1}
+.ss-year{background:linear-gradient(135deg,#E8B84B,#F7D98B,#1EEAC8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.ss-sub{font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#8892A4;margin-bottom:36px}
+.play-btn{background:linear-gradient(135deg,#E8B84B,#F7D98B);color:#0D0800;border:none;padding:16px 40px;border-radius:100px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;pointer-events:all;display:flex;align-items:center;gap:10px;transition:transform .2s,box-shadow .2s}
+.play-btn:hover{transform:scale(1.04);box-shadow:0 16px 40px rgba(232,184,75,.3)}
+.play-btn svg{width:18px;height:18px;fill:#0D0800}
+
+/* ── Progress bar ── */
+#progress{position:fixed;top:0;left:0;height:2px;background:#E8B84B;z-index:50;width:0;transition:width .4s ease}
+
+/* ── Skip btn ── */
+#skip-btn{position:fixed;bottom:28px;right:28px;z-index:50;background:rgba(8,13,26,.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);color:#8892A4;padding:9px 20px;border-radius:100px;font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;pointer-events:all;transition:all .2s;opacity:0;visibility:hidden}
+#skip-btn.show{opacity:1;visibility:visible}
+#skip-btn:hover{border-color:#E8B84B;color:#E8B84B}
+#mute-btn{position:fixed;bottom:28px;left:28px;z-index:50;background:rgba(8,13,26,.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);color:#8892A4;padding:9px 14px;border-radius:100px;font-size:14px;cursor:pointer;pointer-events:all;transition:all .2s;opacity:0;visibility:hidden}
+#mute-btn.show{opacity:1;visibility:visible}
+#mute-btn:hover{border-color:rgba(255,255,255,.2)}
+
+/* ── Étape counter ── */
+#step-counter{position:fixed;top:28px;right:28px;z-index:50;text-align:right;opacity:0;transition:opacity .4s}
+#step-counter.show{opacity:1}
+.sc-cur{font-family:'Playfair Display',serif;font-size:40px;font-weight:900;font-style:italic;color:#E8B84B;line-height:1}
+.sc-tot{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8892A4}
+
+/* ── Texte central (actes) ── */
+.act-text{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:30;pointer-events:none;width:90%;max-width:800px;opacity:0;visibility:hidden;}
+
+/* Acte 1 : titre */
+#act-title{opacity:0;transition:opacity .8s}
+#act-title.show{opacity:1}
+.at-eye{font-size:11px;letter-spacing:5px;text-transform:uppercase;color:#E8B84B;margin-bottom:16px}
+.at-main{font-family:'Playfair Display',serif;font-size:clamp(48px,10vw,100px);font-weight:900;font-style:italic;line-height:.95}
+.at-yr{background:linear-gradient(135deg,#E8B84B,#F7D98B,#1EEAC8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.at-sub{font-size:14px;letter-spacing:2px;color:#8892A4;margin-top:16px;text-transform:uppercase}
+
+/* Acte 2 : ville card */
+#act-city{position:fixed;bottom:48px;left:50%;transform:translateX(-50%) translateY(20px);z-index:30;pointer-events:none;opacity:0;transition:opacity .5s,transform .5s;text-align:center}
+#act-city.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.city-pill{display:inline-block;background:rgba(8,13,26,.85);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:20px 36px}
+.city-step{font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#8892A4;margin-bottom:8px}
+.city-name{font-family:'Playfair Display',serif;font-size:36px;font-weight:700;font-style:italic;line-height:1;margin-bottom:4px}
+.city-country{font-size:12px;color:#8892A4;margin-bottom:14px}
+.city-em{display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:100px;border:1px solid currentColor;font-size:12px;font-weight:500}
+
+/* Acte 3 : vue d'ensemble */
+#act-overview{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:30;pointer-events:none;opacity:0;transition:opacity .8s;text-align:center;white-space:nowrap}
+#act-overview.show{opacity:1}
+.ov-big{font-family:'Playfair Display',serif;font-size:clamp(14px,2vw,22px);font-style:italic;color:#F2F0EB}
+.ov-sub{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#E8B84B;margin-top:6px}
+
+/* Acte 4 : émotion */
+#act-emotion{opacity:0;transition:opacity .8s;text-align:center}
+#act-emotion.show{opacity:1}
+.em-main-emoji{font-size:64px;display:block;margin-bottom:20px;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.em-main-lbl{font-size:10px;letter-spacing:5px;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:8px}
+.em-main-name{font-family:'Playfair Display',serif;font-size:clamp(56px,12vw,120px);font-weight:900;font-style:italic;line-height:1;transition:color .8s}
+.em-main-pct{font-size:14px;color:rgba(255,255,255,.5);margin-top:12px;letter-spacing:2px}
+
+/* Acte 5 : stats */
+#act-stats{opacity:0;transition:opacity .8s}
+#act-stats.show{opacity:1}
+.stats-film{display:flex;flex-direction:column;align-items:center;gap:4px}
+.stat-film-item{opacity:0;transform:translateY(16px);transition:opacity .6s,transform .6s}
+.stat-film-item.in{opacity:1;transform:translateY(0)}
+.sf-num{font-family:'Playfair Display',serif;font-size:clamp(56px,10vw,100px);font-weight:900;line-height:1}
+.sf-lbl{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-top:4px}
+.sf-divider{width:1px;height:40px;background:rgba(255,255,255,.08);margin:8px auto}
+
+/* Acte 6 : couleur de vie */
+#act-color{opacity:0;transition:opacity .8s;text-align:center}
+#act-color.show{opacity:1}
+#color-full-overlay{position:fixed;inset:0;opacity:0;pointer-events:none;transition:opacity 2s ease;z-index:3}
+.col-lbl{font-size:10px;letter-spacing:5px;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:12px}
+.col-title-film{font-family:'Playfair Display',serif;font-size:clamp(32px,6vw,64px);font-weight:900;font-style:italic;line-height:1.1}
+.col-desc-film{font-size:13px;color:rgba(255,255,255,.55);margin-top:14px;max-width:380px;line-height:1.7}
+
+/* Acte 7 : share */
+#act-share{opacity:0;transition:opacity .8s;text-align:center}
+#act-share.show{opacity:1}
+.sh-film-title{font-family:'Playfair Display',serif;font-size:clamp(32px,6vw,60px);font-weight:900;font-style:italic;line-height:1.1;margin-bottom:12px}
+.sh-film-sub{font-size:13px;color:rgba(255,255,255,.5);margin-bottom:32px;letter-spacing:.5px}
+.sh-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;pointer-events:all}
+.btn{padding:14px 28px;border-radius:100px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:8px;transition:transform .2s,box-shadow .2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 14px 32px rgba(0,0,0,.5)}
+.btn-g{background:#E8B84B;color:#0D0800}
+.btn-o{background:rgba(255,255,255,.06);color:#F2F0EB;border:1px solid rgba(255,255,255,.1)}
+
+/* Toast */
+.toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%) translateY(20px);background:#1EEAC8;color:#001510;padding:12px 24px;border-radius:100px;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:all .3s;pointer-events:none;z-index:200}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Marker styles */
+.pin-marker{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.6);cursor:pointer;box-shadow:0 0 16px currentColor;transition:transform .3s}
+.pin-marker.active{transform:scale(1.6);box-shadow:0 0 24px currentColor}
+/* Photo overlay sur marker actif */
+
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="color-overlay"></div>
+<div id="color-full-overlay"></div>
+<div id="progress"></div>
+<div id="skip-btn" onclick="skip()">Passer →</div>
+<button id="mute-btn" onclick="toggleMute()" title="Musique">🔊</button>
+
+<div id="step-counter" class="step-counter">
+  <div class="sc-cur" id="sc-cur">1</div>
+  <div class="sc-tot" id="sc-tot">/ 7 étapes</div>
+</div>
+
+<!-- Couches texte -->
+<div id="act-title" class="act-text">
+  <div class="at-eye">✦ MemoMaker Wrapped ✦</div>
+  <div class="at-main"><span class="at-yr" id="title-yr">2024</span></div>
+  <div class="at-main" style="margin-top:-8px" id="title-name" style="font-size:clamp(28px,5vw,52px)">L'année de Moussa</div>
+  <div class="at-sub" id="title-sub">Ta carte émotionnelle du monde</div>
+</div>
+
+<div id="act-city">
+  <div class="city-pill">
+    <div class="city-step" id="city-step">Étape 1</div>
+    <div class="city-name" id="city-name">Paris</div>
+    <div class="city-country" id="city-country">France</div>
+    <div class="city-em" id="city-em">☀️ Joie</div>
+  </div>
+</div>
+
+<div id="act-overview" class="act-text">
+  <div class="ov-big" id="ov-big">7 destinations · 12 480 km parcourus</div>
+  <div class="ov-sub">Ton voyage de l'année</div>
+</div>
+
+<div id="act-earth" class="act-text">
+  <div style="font-size:10px;letter-spacing:5px;text-transform:uppercase;color:rgba(232,184,75,.7);margin-bottom:12px">Cette année tu as exploré</div>
+  <div id="earth-pct" style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(72px,14vw,140px);font-weight:900;font-style:italic;line-height:1;color:#F2F0EB">0%</div>
+  <div style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(18px,3vw,28px);font-style:italic;color:rgba(242,240,235,.6);margin-top:8px">de la surface terrestre</div>
+  <div id="earth-sub" style="font-size:12px;letter-spacing:2px;color:rgba(232,184,75,.6);margin-top:16px;text-transform:uppercase"></div>
+</div>
+
+<div id="act-emotion" class="act-text">
+  <span class="em-main-emoji" id="em-emoji">☀️</span>
+  <div class="em-main-lbl">Ton émotion dominante</div>
+  <div class="em-main-name" id="em-name">JOIE</div>
+  <div class="em-main-pct" id="em-pct">dans 38% de tes souvenirs</div>
+</div>
+
+<div id="act-stats" class="act-text">
+  <div class="stats-film">
+    <div class="stat-film-item" id="sf1">
+      <div class="sf-num" id="sf-mem" style="color:#E8B84B">0</div>
+      <div class="sf-lbl">souvenirs créés</div>
+    </div>
+    <div class="sf-divider"></div>
+    <div class="stat-film-item" id="sf2">
+      <div class="sf-num" id="sf-cnt" style="color:#1EEAC8">0</div>
+      <div class="sf-lbl">pays explorés</div>
+    </div>
+    <div class="sf-divider"></div>
+    <div class="stat-film-item" id="sf3">
+      <div class="sf-num" id="sf-km" style="color:#818CF8">0 km</div>
+      <div class="sf-lbl">parcourus</div>
+    </div>
+  </div>
+</div>
+
+<div id="act-color" class="act-text">
+  <div class="col-lbl">Ta couleur de vie</div>
+  <div class="col-title-film">Ton dégradé <em id="col-yr">2024</em></div>
+  <div class="col-desc-film">Ce dégradé est unique — il reflète le mélange exact de tes émotions. Personne d'autre sur Terre n'a la même signature émotionnelle.</div>
+</div>
+
+<div id="act-share" class="act-text">
+  <div style="font-size:10px;letter-spacing:5px;text-transform:uppercase;color:rgba(232,184,75,.7);margin-bottom:16px">Partage ton année</div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap">
+    <div style="text-align:left">
+      <div class="sh-film-title" style="font-size:clamp(28px,5vw,48px);text-align:left">Ton Wrapped<br><em id="sh-yr2">2024</em></div>
+      <div class="sh-film-sub" style="margin-top:10px;margin-bottom:20px;text-align:left">Scanne ou copie le lien</div>
+      <div class="sh-btns" style="justify-content:flex-start">
+        <button class="btn btn-g" onclick="copyLink()">📋 Copier</button>
+        <button class="btn btn-o" onclick="shareIt()">↗ Partager</button>
+        <button class="btn btn-o" onclick="restart()">↺ Revoir</button>
+      </div>
+    </div>
+    <div style="background:white;border-radius:16px;padding:12px;flex-shrink:0;line-height:0">
+      <canvas id="qr-canvas" width="160" height="160"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Start screen -->
+<div id="start-screen" class="show">
+  <div class="ss-pin">📍</div>
+  <div class="ss-title"><span class="ss-year" id="ss-yr">2024</span><br>Wrapped</div>
+  <div class="ss-sub" id="ss-name">Moussa</div>
+  <button class="play-btn" onclick="startWrapped()">
+    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    Regarder mon Wrapped
+  </button>
+</div>
+
+<div class="toast" id="toast">✓ Lien copié !</div>
+
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ── Config émotions ──────────────────────────────────────────────
+const EM={
+  JOY:      {l:'Joie',e:'☀️',c:'#F5C842',d:'dans %% de tes souvenirs'},
+  NOSTALGIA:{l:'Nostalgie',e:'🌊',c:'#3B82F6',d:'dans %% de tes souvenirs'},
+  LOVE:     {l:'Amour',e:'❤️',c:'#EF4444',d:'dans %% de tes souvenirs'},
+  ADVENTURE:{l:'Aventure',e:'🌿',c:'#10B981',d:'dans %% de tes souvenirs'},
+  SADNESS:  {l:'Tristesse',e:'🌙',c:'#8B5CF6',d:'dans %% de tes souvenirs'},
+};
+
+// ── Démo ─────────────────────────────────────────────────────────
+const DEMO={
+  year:2024,username:'Moussa',
+  totalMemories:24,totalCountries:7,totalKm:12480,
+  dominantEmotion:'JOY',dominantEmotionHex:'#F5C842',
+  lifeColor:'linear-gradient(135deg,#F5C842 0%,#10B981 45%,#3B82F6 100%)',
+  bestMonth:'Juillet',farthestCity:'Tokyo',
+  emotionPercentages:{JOY:38,ADVENTURE:25,NOSTALGIA:18,LOVE:12,SADNESS:7},
+  destinations:[
+    {city:'Paris',country:'France',lat:48.8566,lng:2.3522,emotion:'JOY',zoom:6,photoUrl:'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=300&q=80'},
+    {city:'Barcelone',country:'Espagne',lat:41.3851,lng:2.1734,emotion:'ADVENTURE',zoom:6,photoUrl:'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=300&q=80'},
+    {city:'Rome',country:'Italie',lat:41.9028,lng:12.4964,emotion:'LOVE',zoom:6,photoUrl:'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=300&q=80'},
+    {city:'Berlin',country:'Allemagne',lat:52.52,lng:13.405,emotion:'JOY',zoom:6,photoUrl:'https://images.unsplash.com/photo-1560969184-10fe8719e047?w=300&q=80'},
+    {city:'Lisbonne',country:'Portugal',lat:38.7169,lng:-9.1395,emotion:'NOSTALGIA',zoom:6,photoUrl:'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=300&q=80'},
+    {city:'Tokyo',country:'Japon',lat:35.6762,lng:139.6503,emotion:'ADVENTURE',zoom:6,photoUrl:'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=300&q=80'},
+    {city:'New York',country:'États-Unis',lat:40.7128,lng:-74.006,emotion:'JOY',zoom:6,photoUrl:'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=300&q=80'},
+  ]
+};
+
+// ── State ────────────────────────────────────────────────────────
+let map,D,routeCoords=[],markers=[];
+let playing=false,skipReq=false,mapReady=false;
+
+// ── Parse URL ────────────────────────────────────────────────────
+async function parseData(){
+  const r=new URLSearchParams(location.search).get('data');
+  if(!r)return null;
+  try{
+    const b64=r.replace(/-/g,'+').replace(/_/g,'/');
+    const pad=b64+'=='.slice(0,(4-b64.length%4)%4);
+    const bin=atob(pad);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    const json=new TextDecoder('utf-8').decode(bytes);
+    return JSON.parse(json);
+  }catch(e){console.error('parseData:',e);return null;}
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+const wait=ms=>new Promise(r=>{
+  const id=setTimeout(()=>{r();},ms);
+  const check=setInterval(()=>{
+    if(skipReq){
+      clearTimeout(id);
+      clearInterval(check);
+      r();
+    }
+  },30);
+  // Nettoyer quand la promise se résout normalement
+  setTimeout(()=>clearInterval(check), ms+100);
+});
+function show(id){document.getElementById(id).classList.add('show')}
+function hide(id){document.getElementById(id).classList.remove('show')}
+// Gestion des actes — un seul visible à la fois
+function showAct(id){
+  // D'abord cacher tout
+  document.querySelectorAll('.act-text').forEach(el=>{
+    el.style.opacity='0';
+    el.style.visibility='hidden';
+    el.style.pointerEvents='none';
+  });
+  // Puis afficher le bon après un micro-délai pour que la transition marche
+  const el=document.getElementById(id);
+  if(el){
+    el.style.visibility='visible';
+    el.style.pointerEvents= el.id==='act-share' ? 'all' : 'none';
+    // Forcer un reflow puis animer
+    el.offsetHeight;
+    el.style.transition='opacity .7s ease';
+    el.style.opacity='1';
+  }
+}
+function hideAct(id){
+  const el=document.getElementById(id);
+  if(el){el.style.opacity='0';el.style.visibility='hidden';}
+}
+function hideAllActs(){
+  document.querySelectorAll('.act-text').forEach(el=>{
+    el.style.opacity='0';
+    el.style.visibility='hidden';
+    el.style.pointerEvents='none';
+  });
+}
+function setProgress(pct){document.getElementById('progress').style.width=pct+'%'}
+function countUp(id,to,dur=1200,fmt=v=>v.toLocaleString('fr')){
+  const el=document.getElementById(id);const s=performance.now();
+  function f(n){const p=Math.min((n-s)/dur,1);const e=1-Math.pow(1-p,4);el.textContent=fmt(Math.round(to*e));if(p<1)requestAnimationFrame(f);}
+  requestAnimationFrame(f);
+}
+function fadeIn(id,d=800){const el=document.getElementById(id);el.style.transition=`opacity ${d}ms ease`;el.style.opacity=1}
+function fadeOut(id,d=600){const el=document.getElementById(id);el.style.transition=`opacity ${d}ms ease`;el.style.opacity=0}
+const fly=(c,z,dur=2000,pitch=45)=>new Promise(r=>{
+  const actualDur=skipReq?400:dur;
+  map.flyTo({center:c,zoom:6,pitch:skipReq?0:pitch,bearing:skipReq?0:Math.random()*20-10,duration:actualDur,essential:true,curve:1.3,speed:skipReq?.7:0.7});
+  const id=setTimeout(r,actualDur+100);
+  const check=setInterval(()=>{
+    if(skipReq){clearTimeout(id);clearInterval(check);
+      map.stop();r();
+    }
+  },30);
+  setTimeout(()=>clearInterval(check),actualDur+200);
+});
+
+// ── Init map ─────────────────────────────────────────────────────
+function initMap(){
+  return new Promise(resolve=>{
+    map=new maplibregl.Map({
+      container:'map',
+      style:{
+        version:8,
+        sources:{'osm':{type:'raster',tiles:['https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png'],tileSize:256}},
+        layers:[{id:'bg',type:'background',paint:{'background-color':'#04060F'}},{id:'osm',type:'raster',source:'osm',paint:{'raster-opacity':.88,'raster-saturation':-.5,'raster-brightness-min':.05}}]
+      },
+      center:[15,30],zoom:2.2,
+      interactive:false,antialias:true
+    });
+    map.on('load',()=>{
+      map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[]}}});
+      map.addLayer({id:'route-glow',type:'line',source:'route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#E8B84B','line-width':4,'line-opacity':.15,'line-blur':4}});
+      map.addLayer({id:'route-line',type:'line',source:'route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#E8B84B','line-width':1.5,'line-opacity':.7,'line-dasharray':[3,3]}});
+      mapReady=true;
+      resolve();
+    });
+  });
+}
+
+function addMarker(dest,active=false){
+  const em=EM[dest.emotion]||EM.JOY;
+  const el=document.createElement('div');
+  el.className='pin-marker'+(active?' active':'');
+  el.style.background=em.c;
+  el.style.boxShadow=`0 0 16px ${em.c}99`;
+  const m=new maplibregl.Marker({element:el,offset:[-7,-7]}).setLngLat([dest.lng,dest.lat]).addTo(map);
+  markers.push({marker:m,el,wrap:el});
+  return {el,wrap:el};
+}
+
+// ════════════════════════════════════════════════════════════════
+// SCÉNARIO PRINCIPAL
+// ════════════════════════════════════════════════════════════════
+async function startWrapped(){
+  if(playing)return;
+  // Si pas de destinations dans les données, utiliser les démo
+  if(!D.destinations||D.destinations.length===0){
+    D.destinations=DEMO.destinations;
+  }
+  if(!mapReady){
+    const btn=document.querySelector('.play-btn');
+    btn.textContent='⏳ Chargement...';
+    let tries=0;
+    while(!mapReady&&tries<80){await new Promise(r=>setTimeout(r,100));tries++;}
+    if(!mapReady){btn.textContent='❌ Erreur carte';return;}
+    btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Regarder mon Wrapped';
+  }
+  playing=true;
+  document.getElementById('start-screen').style.opacity='0';
+  document.getElementById('start-screen').style.visibility='hidden';
+  startAudio();
+  show('skip-btn');
+  initAudio();
+
+  // ── ACTE 1 : Ouverture ────────────────────────────────────────
+  setProgress(5);
+  await fly([15,25],2.2,1200);
+  showAct('act-title');
+  await wait(1800);
+  hideAllActs();
+  await wait(300);
+
+  // ── ACTE 2 : Le voyage (ville par ville) ──────────────────────
+  show('step-counter');
+  document.getElementById('sc-tot').textContent='/ '+D.destinations.length+' étapes';
+  const total=D.destinations.length;
+
+  for(let i=0;i<total;i++){
+    const dest=D.destinations[i];
+    const em=EM[dest.emotion]||EM.JOY;
+
+    setProgress(10+i/total*40);
+    document.getElementById('sc-cur').textContent=i+1;
+
+    // Changer couleur overlay légèrement
+    document.getElementById('color-overlay').style.background=em.c+'22';
+    document.getElementById('color-overlay').style.opacity='.6';
+
+    // Fly vers la ville
+    await fly([dest.lng,dest.lat],6,skipReq?400:2000);
+
+    // Remettre la carte à plat
+    map.easeTo({pitch:0,bearing:0,duration:600,essential:true});
+    await new Promise(r=>setTimeout(r,500));
+
+    // Ajouter route
+    routeCoords.push([dest.lng,dest.lat]);
+    map.getSource('route').setData({type:'Feature',geometry:{type:'LineString',coordinates:routeCoords}});
+
+    // Marker actif
+    markers.forEach(m=>m.el.classList.remove('active'));
+    const {el:pinEl}=addMarker(dest,true);
+
+    // Afficher card ville
+    document.getElementById('city-step').textContent='Étape '+(i+1);
+    document.getElementById('city-name').textContent=dest.city;
+    document.getElementById('city-country').textContent=dest.country;
+    document.getElementById('city-em').textContent=em.e+' '+em.l;
+    document.getElementById('city-em').style.color=em.c;
+    document.getElementById('city-em').style.borderColor=em.c+'66';
+    show('act-city');
+
+    await wait(skipReq?200:2500);
+    hide('act-city');
+    pinEl.classList.remove('active');
+    await wait(200);
+    skipReq=false;
+  }
+
+  document.getElementById('color-overlay').style.opacity='0';
+
+  // ── ACTE 3 : Vue d'ensemble ───────────────────────────────────
+  setProgress(50);
+  hide('step-counter');
+
+  // Calculer bounds
+  const lngs=D.destinations.map(d=>d.lng),lats=D.destinations.map(d=>d.lat);
+  const bounds=[[Math.min(...lngs)-8,Math.min(...lats)-8],[Math.max(...lngs)+8,Math.max(...lats)+8]];
+  const p1=new Promise(r=>{
+    map.fitBounds(bounds,{padding:80,duration:skipReq?400:2500,essential:true});
+    setTimeout(r,skipReq?500:2700);
+  });
+  await p1;
+  skipReq=false;
+
+  document.getElementById('ov-big').textContent=D.destinations.length+' destinations · '+(D.totalKm||0).toLocaleString('fr')+' km parcourus';
+  showAct('act-overview');
+  await wait(3500);
+  hideAllActs();
+  await wait(500);
+  skipReq=false;
+
+  // ── ACTE 3b : % de la Terre ──────────────────────────────────
+  setProgress(55);
+  const earthPct = D.earthPercentage || (D.totalCountries ? (D.totalCountries * 0.7).toFixed(2) : '0.00');
+  document.getElementById('earth-pct').textContent = earthPct + '%';
+  document.getElementById('earth-sub').textContent =
+    D.totalCountries + ' pays · ' + (D.totalKm||0).toLocaleString('fr') + ' km';
+  showAct('act-earth');
+  // Animer le compteur
+  const earthTarget = parseFloat(earthPct);
+  const earthStart = performance.now();
+  const earthAnim = (now) => {
+    const p = Math.min((now - earthStart) / 1500, 1);
+    const e = 1 - Math.pow(1 - p, 3);
+    document.getElementById('earth-pct').textContent =
+      (earthTarget * e).toFixed(2) + '%';
+    if(p < 1) requestAnimationFrame(earthAnim);
+  };
+  requestAnimationFrame(earthAnim);
+  await wait(3500);
+  hideAllActs();
+  await wait(500);
+  skipReq = false;
+
+  // ── ACTE 4 : Émotion dominante ────────────────────────────────
+  setProgress(65);
+  const em=EM[D.dominantEmotion]||EM.JOY;
+  const pct=(D.emotionPercentages&&D.emotionPercentages[D.dominantEmotion])||0;
+
+  // Voler vers une belle vue
+  await fly([15,25],2.5,skipReq?400:1500);
+
+  // Overlay couleur émotion
+  document.getElementById('color-overlay').style.background=em.c+'30';
+  document.getElementById('color-overlay').style.opacity='1';
+
+  document.getElementById('em-emoji').textContent=em.e;
+  document.getElementById('em-name').textContent=em.l.toUpperCase();
+  document.getElementById('em-name').style.color=em.c;
+  document.getElementById('em-pct').textContent='dans '+pct+'% de tes souvenirs';
+  showAct('act-emotion');
+
+  await wait(4000);
+  hideAllActs();
+  document.getElementById('color-overlay').style.opacity='0';
+  await wait(600);
+  skipReq=false;
+
+  // ── ACTE 5 : Stats ────────────────────────────────────────────
+  setProgress(78);
+  showAct('act-stats');
+
+  setTimeout(()=>{
+    document.getElementById('sf1').classList.add('in');
+    countUp('sf-mem',D.totalMemories||0,1200);
+  },200);
+  setTimeout(()=>{
+    document.getElementById('sf2').classList.add('in');
+    countUp('sf-cnt',D.totalCountries||0,1000);
+  },900);
+  setTimeout(()=>{
+    document.getElementById('sf3').classList.add('in');
+    countUp('sf-km',D.totalKm||0,1400,v=>v.toLocaleString('fr')+' km');
+  },1600);
+
+  await wait(5000);
+  hideAllActs();
+  ['sf1','sf2','sf3'].forEach(id=>document.getElementById(id).classList.remove('in'));
+  await wait(600);
+  skipReq=false;
+
+  // ── ACTE 6 : Couleur de vie ───────────────────────────────────
+  setProgress(90);
+  const stops=Object.entries(D.emotionPercentages||{}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k])=>EM[k]?.c||'#666');
+  const grad=D.lifeColor||(stops.length>1?`linear-gradient(135deg,${stops.join(',')})`:`linear-gradient(135deg,${stops[0]||'#E8B84B'},#1EEAC8)`);
+
+  // Dégradé envahit la carte
+  document.getElementById('color-full-overlay').style.background=grad;
+  document.getElementById('color-full-overlay').style.opacity='.25';
+
+  document.getElementById('col-yr').textContent=D.year||2024;
+  showAct('act-color');
+
+  await wait(4000);
+  document.getElementById('color-full-overlay').style.opacity='0';
+  hideAllActs();
+  await wait(600);
+  skipReq=false;
+
+  // ── ACTE 7 : Share ────────────────────────────────────────────
+  setProgress(100);
+  hide('skip-btn');
+  setTimeout(generateQR,600);
+  document.getElementById('sh-yr2').textContent=D.year||2024;
+  setTimeout(generateQR,600);
+
+  // Rotation douce de la carte
+  let bearing=0;
+  const rotateMap=setInterval(()=>{bearing+=.08;map.setBearing(bearing);},30);
+
+  showAct('act-share');
+  document.getElementById('act-share').style.pointerEvents='all';
+  setTimeout(()=>clearInterval(rotateMap),8000);
+}
+
+// ── Skip ─────────────────────────────────────────────────────────
+function skip(){skipReq=true;}
+function restart(){location.reload();}
+
+// ── Share ────────────────────────────────────────────────────────
+function startAudio(){
+  if(window._audioStarted)return;window._audioStarted=true;
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const g=ctx.createGain();g.gain.setValueAtTime(0,ctx.currentTime);
+    g.gain.linearRampToValueAtTime(.09,ctx.currentTime+3);g.connect(ctx.destination);
+    window._gainNode=g;window._audioCtx=ctx;
+    [110,165,220,247].forEach((f,i)=>{
+      const o=ctx.createOscillator(),og=ctx.createGain();
+      o.type=i%2?'triangle':'sine';o.frequency.value=f;
+      og.gain.value=.15/(i+1);o.connect(og);og.connect(g);o.start();
+    });
+    document.getElementById('mute-btn').style.display='block';
+  }catch(e){}
+}
+function toggleMute(){
+  if(!window._gainNode)return;
+  window._muted=!window._muted;
+  window._gainNode.gain.linearRampToValueAtTime(window._muted?0:.09,window._audioCtx.currentTime+.4);
+  document.getElementById('mute-btn').textContent=window._muted?'🔇':'🔊';
+}
+function generateQR(){
+  if(!window.QRCode)return;
+  const d=document.getElementById('qr-div');if(!d)return;
+  d.innerHTML='';
+  try{new QRCode(d,{text:location.href,width:150,height:150,colorDark:'#04060F',colorLight:'#FFFFFF'});
+  document.getElementById('qr-wrap').style.display='block';}catch(e){}
+}
+function copyLink(){
+  navigator.clipboard.writeText(location.href).then(()=>{
+    const t=document.getElementById('toast');t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),2500);
+  });
+}
+function shareIt(){
+  if(navigator.share)navigator.share({title:'MemoMaker Wrapped '+((D&&D.year)||2024),text:'🗺️ Voilà ma carte émotionnelle de l\'année !',url:location.href});
+  else copyLink();
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',async()=>{
+  D=await parseData()||DEMO;
+
+  // Remplir les textes du start screen
+  document.getElementById('ss-yr').textContent=D.year||2024;
+  document.getElementById('ss-name').textContent=D.username||'';
+  document.getElementById('title-yr').textContent=D.year||2024;
+  document.getElementById('title-name').textContent='L\'année de '+(D.username||'');
+
+  // Init carte immédiatement
+  initMap();
+
+  // Afficher start screen après le loader
+  setTimeout(()=>{
+    document.getElementById('loader').classList.add('out');
+    const ss=document.getElementById('start-screen');
+    ss.style.opacity='1';
+    ss.style.visibility='visible';
+  },1200);
+});
+</script>
+</body>
+</html>
